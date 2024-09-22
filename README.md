@@ -7,4 +7,4 @@
    Run `redmapper_member_save.py` to process and save redMaPPer members (also matched with `gold` and `bpz` catalogs).
 
 3. **Match Halos with redMaPPer Members**:  
-   After saving both, run `match_redmapper_with_gold.py` to match the halos with redMaPPer members..
+   After saving both, choose one of `match_redmapper_with_gold` files (`_process` is better) to match the halos with redMaPPer members, depending on available memory.
