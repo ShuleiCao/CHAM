@@ -7,19 +7,11 @@ from astropy.table import Table, vstack
 from joblib import Parallel, delayed
 from collections import defaultdict
 from scipy.spatial import cKDTree
-from joblib import Parallel, delayed
 import gc
 import logging
 from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor
-from functools import partial
-from memory_profiler import profile
-from multiprocessing import Process, shared_memory
-import multiprocessing
-from multiprocessing.pool import ThreadPool as Pool
-#from cluster_processing import process_cluster, get_name
-from functools import partial
-from multiprocessing import Lock
+from multiprocessing import Manager, Pool, Lock
+
 import tempfile
 temp_dir = "/lustre/scratch/client/users/shuleic/temp_folder/"
 tempfile.tempdir = temp_dir
@@ -41,16 +33,6 @@ def get_name(file_path, names, mask=None, file_format='fits', key='gold'):
         raise ValueError(f"Unknown file format: {file_format}")
     return data_names
 
-def init_logger(log_queue):
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    
-    # Create a handler that logs to the Queue
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    handler.setStream(log_queue)
-    logger.addHandler(handler)
-
 def save_cluster_data_hdf5(cluster_id, data, output_folder):
     cluster_filename = os.path.join(output_folder, f"{cluster_id}.h5")
     temp_filename = os.path.join(output_folder, f"{cluster_id}_temp.h5")
@@ -67,21 +49,15 @@ def save_cluster_data_hdf5(cluster_id, data, output_folder):
                 halo_group.attrs['m200'] = halo_data['m200']
     os.rename(temp_filename, cluster_filename)
 
-shared_vars_lock = Lock()
+# shared_vars_lock = Lock()
 
-def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_variables, output_folder):
+def process_cluster(cluster_id, redmapper_mem_data_path, halo_coords, halo_r200, halo_ids, halo_masses, tree_processes, output_folder):
     cluster_filename = os.path.join(output_folder, f"{cluster_id}.h5")
     # Check if the output file already exists
     if os.path.exists(cluster_filename):
         logging.info(f"Skipping cluster {cluster_id} as the output file already exists.")
         return  # Skip processing
     
-    with shared_vars_lock:
-        halo_coords_shared = shared_variables['halo_coords_shared']
-        halo_r200_shared = shared_variables['halo_r200_shared']
-        halo_ids_shared = shared_variables['halo_ids_shared']
-        halo_masses_shared = shared_variables['halo_masses_shared']
-
     # 1. Filter members of the current cluster
     redmapper_mem_data = get_name(redmapper_mem_data_path, ['mem_match_id'])
     cluster_member_mask = redmapper_mem_data['mem_match_id'] == cluster_id
@@ -94,19 +70,13 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
     gc.collect()
 
     galaxy_tree = cKDTree(redmapper_mem_coords)
-    galaxy_indices = galaxy_tree.query_ball_point(halo_coords_shared, halo_r200_shared, workers=tree_processes)
-
-    # # Create a mapping between original galaxy indices and their indices in redmapper_mem_coords
-    # galaxy_mapping = {}
-    
-    # for original_idx, redmapper_mem_idx in enumerate(cluster_member_indices):
-    #     galaxy_mapping[redmapper_mem_idx] = original_idx
+    galaxy_indices = galaxy_tree.query_ball_point(halo_coords, halo_r200, workers=tree_processes)
 
     # Process the results
     all_associated_indices = []
     associated_halo_data = []
     
-    for halo_id, halo_mass, member_indices in zip(halo_ids_shared, halo_masses_shared, galaxy_indices):
+    for halo_id, halo_mass, member_indices in zip(halo_ids, halo_masses, galaxy_indices):
         if len(member_indices) > 0:
             member_data_combined = {}        
             for member_idx in member_indices:
@@ -127,7 +97,7 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
                 'n_members': len(member_indices),
                 'members': member_data_combined
             })
-    
+
     for halo_data in associated_halo_data:
         for key, value in halo_data['members'].items():
             halo_data['members'][key] = np.array(value)
@@ -177,12 +147,6 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
     }, output_folder)
 
 if __name__ == "__main__":
-    # Create a multiprocessing Queue to pass log messages
-    log_queue = multiprocessing.Queue()
-
-    # Create a logger process and initialize the logger
-    logger_process = multiprocessing.Process(target=init_logger, args=(log_queue,))
-    logger_process.start()
 
     # Set the logging level to INFO
     logging.basicConfig(level=logging.INFO)
@@ -193,7 +157,6 @@ if __name__ == "__main__":
     
     halo_data_path = os.path.join(base_path, 'halo_data_all_new.fits')
     redmapper_mem_data_path = os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_data_all.fits')
-#     redmapper_centrals_data_path = os.path.join(base_path, 'chunhao-redmapper_centrals_data_all_new.fits')
 
     # Read the data from the saved FITS files
     halo_data = get_name(halo_data_path, ['m200', 'r200', 'haloid', 'px', 'py', 'pz'])
@@ -204,26 +167,7 @@ if __name__ == "__main__":
     del halo_data
     gc.collect()
 
-    # Create shared memory for halo_coords, halo_r200, and halo_ids
-    halo_coords_shm = shared_memory.SharedMemory(create=True, size=halo_coords.nbytes)
-    halo_r200_shm = shared_memory.SharedMemory(create=True, size=halo_r200.nbytes)
-    halo_ids_shm = shared_memory.SharedMemory(create=True, size=halo_ids.nbytes)
-    halo_masses_shm = shared_memory.SharedMemory(create=True, size=halo_masses.nbytes)
-
-    # Copy the data to shared memory
-    halo_coords_shared = np.ndarray(halo_coords.shape, dtype=halo_coords.dtype, buffer=halo_coords_shm.buf)
-    halo_coords_shared[:] = halo_coords[:]
-    halo_r200_shared = np.ndarray(halo_r200.shape, dtype=halo_r200.dtype, buffer=halo_r200_shm.buf)
-    halo_r200_shared[:] = halo_r200[:]
-    halo_ids_shared = np.ndarray(halo_ids.shape, dtype=halo_ids.dtype, buffer=halo_ids_shm.buf)
-    halo_ids_shared[:] = halo_ids[:]
-    halo_masses_shared = np.ndarray(halo_masses.shape, dtype=halo_masses.dtype, buffer=halo_masses_shm.buf)
-    halo_masses_shared[:] = halo_masses[:]
-
-    del halo_coords, halo_r200, halo_ids, halo_masses
-#     gc.collect()
-    
-    logging.info("Processing clusters...")
+    # logging.info("Processing clusters...")
     tree_processes = 4
     num_threads = 64
 
@@ -232,42 +176,15 @@ if __name__ == "__main__":
     del redmapper_mem_data
 #     gc.collect()
 
-    shared_variables = {
-        'halo_coords_shared': halo_coords_shared,
-        'halo_r200_shared': halo_r200_shared,
-        'halo_ids_shared': halo_ids_shared,
-        'halo_masses_shared': halo_masses_shared
-    }
 
     output_folder = os.path.join(base_path, f"cluster{suffix}_data")
     os.makedirs(output_folder, exist_ok=True)
     sorted_unique_cluster_ids = sorted(unique_cluster_ids)
     del unique_cluster_ids
     
-    # Use the sorted list in the Pool
+    def wrapper(cluster_id):
+        return process_cluster(cluster_id, redmapper_mem_data_path, halo_coords, halo_r200, halo_ids, halo_masses, tree_processes, output_folder)
+
     with tqdm(total=len(sorted_unique_cluster_ids), desc="Processing clusters") as pbar, Pool(processes=num_threads) as pool:
-        def update_progress(_):
-            pbar.update(1)
-
-        for cluster_id in sorted_unique_cluster_ids:
-            pool.apply_async(
-                process_cluster,
-                args=(cluster_id, redmapper_mem_data_path, tree_processes, shared_variables, output_folder),
-                callback=update_progress  # Corrected callback
-            )
-
-        # Wait for all tasks to complete
-        pool.close()
-        pool.join()
-
-    logger_process.join()
-
-    # Clean up shared memory when it's no longer needed
-    halo_coords_shm.close()
-    halo_coords_shm.unlink()
-    halo_r200_shm.close()
-    halo_r200_shm.unlink()
-    halo_ids_shm.close()
-    halo_ids_shm.unlink()
-    halo_masses_shm.close()
-    halo_masses_shm.unlink()
+        for result in pool.imap(wrapper, sorted_unique_cluster_ids):
+            pbar.update()  # Update the progress bar for each completed task
