@@ -19,9 +19,11 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def get_name(file_path, names, mask=None, file_format='fits', key='gold'):
     if file_format == 'fits':
-        with fits.open(file_path) as hdul:
-            data = hdul[1].data  
-            data_names = {name: data[name][mask] if mask is not None else data[name] for name in names}
+        table_data = Table.read(file_path)  # Directly read the FITS file into an Astropy Table
+        if mask is not None:
+            table_data = table_data[mask]  # Apply the mask directly to the table
+
+        data_names = {name: table_data[name] for name in names}  # Extract the relevant columns
     elif file_format == 'hdf5':
         with h5py.File(file_path, 'r') as f:
             data_names = {name: f['catalog/'][key][name][:][mask] if mask is not None else f['catalog/'][key][name][:] for name in names}
@@ -79,17 +81,23 @@ def load_data_for_pixel_and_neighbors(pixel_id, gold_data_path, columns, gold_pi
             data[col] = np.concatenate([data[col], pixel_data[col]])
     return data
 
+# suffix = '_lgt20'
+suffix = '_lgt05'
+
 base_path = '/lustre/work/client/users/shuleic/Cardinalv3/'
 gold_path = os.path.join(base_path, 'Cardinal-3_v2.0_Y6a_gold.h5')
+# redmapper_mem_path = os.path.join(base_path, 'redmapper_v4_v8_v51_y6_v7/run/', f'Cardinal-3Y6a_v2.0_run_run_redmapper_v0.8.1{suffix}_vl02_catalog_members.fit')
+# redmapper_path = os.path.join(base_path, 'redmapper_v4_v8_v51_y6_v7/run/', f'Cardinal-3Y6a_v2.0_run_run_redmapper_v0.8.1{suffix}_vl02_catalog.fit')
 bpz_path = os.path.join(base_path, 'Cardinal-3_v2.0_Y6a_bpz.h5')
 
-# Compute pixel IDs
-gold_radec = get_name(gold_path, ['ra', 'dec'], file_format='hdf5', key='gold')
-gold_pixels = compute_pixel_id(gold_radec['ra'], gold_radec['dec'])
-del gold_radec
-
-np.savez(os.path.join(base_path, 'gold_pixels_nside8.npz'), gold_pixels=gold_pixels)
-# gold_pixels = np.load(os.path.join(base_path, 'gold_pixels_nside8.npz'))['gold_pixels']
+gold_pixels_path = os.path.join(base_path, 'gold_pixels_nside8.npz')
+if os.path.isfile(gold_pixels_path):
+    gold_pixels = np.load(gold_pixels_path)['gold_pixels']
+else:
+    gold_radec = get_name(gold_path, ['ra', 'dec'], file_format='hdf5', key='gold')
+    gold_pixels = compute_pixel_id(gold_radec['ra'], gold_radec['dec'])
+    del gold_radec
+    np.savez(gold_pixels_path, gold_pixels=gold_pixels)
 
 unique_gold_pixels = np.unique(gold_pixels)
 
@@ -119,6 +127,7 @@ halo_data = list(results)
 
 # Convert to single Tables
 halo_data = vstack(halo_data)
-halo_data.write(os.path.join(base_path,'halo_data_all.fits'), overwrite=True)
+halo_path = os.path.join(base_path,'halo_data_all_new.fits')
+halo_data.write(halo_path, overwrite=True)
 # del halo_data
 # gc.collect()

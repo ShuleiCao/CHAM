@@ -5,18 +5,17 @@ import healpy as hp
 import os
 from astropy.table import Table, vstack
 from joblib import Parallel, delayed
-from collections import defaultdict
-from scipy.spatial import cKDTree
-from joblib import Parallel, delayed
 import gc
 from tqdm import tqdm
 import pandas as pd
 
 def get_name(file_path, names, mask=None, file_format='fits', key='gold'):
     if file_format == 'fits':
-        with fits.open(file_path) as hdul:
-            data = hdul[1].data  
-            data_names = {name: data[name][mask] if mask is not None else data[name] for name in names}
+        table_data = Table.read(file_path)  # Directly read the FITS file into an Astropy Table
+        if mask is not None:
+            table_data = table_data[mask]  # Apply the mask directly to the table
+
+        data_names = {name: table_data[name] for name in names}  # Extract the relevant columns
     elif file_format == 'hdf5':
         with h5py.File(file_path, 'r') as f:
             data_names = {name: f['catalog/'][key][name][:][mask] if mask is not None else f['catalog/'][key][name][:] for name in names}
@@ -58,7 +57,7 @@ def get_relevant_neighboring_pixels(pixel_id, gold_pixel_ids, nside=8):
     neighbors = neighbors[~np.isnan(neighbors)].astype(int)
     return [pid for pid in neighbors if pid in gold_pixel_ids]
 
-def load_data_for_pixel_and_neighbors(pixel_id, gold_data_path, columns, gold_pixel_ids, file_format='hdf5', key='gold'):
+def load_data_for_pixel_and_neighbors(gold_data_path, pixel_id, columns, gold_pixel_ids, file_format='hdf5', key='gold'):
     # Start with the main pixel's data
     data = load_data_for_pixel(gold_data_path, pixel_id, columns, gold_pixel_ids, file_format, key)
     
@@ -74,31 +73,36 @@ def load_data_for_pixel_and_neighbors(pixel_id, gold_data_path, columns, gold_pi
             data[col] = np.concatenate([data[col], pixel_data[col]])
     return data
 
+
 # suffix = '_lgt20'
 suffix = '_lgt05'
 
 base_path = '/lustre/work/client/users/shuleic/Cardinalv3/'
 gold_path = os.path.join(base_path, 'Cardinal-3_v2.0_Y6a_gold.h5')
 redmapper_mem_path = os.path.join(base_path, 'redmapper_v4_v8_v51_y6_v7/run/', f'Cardinal-3Y6a_v2.0_run_run_redmapper_v0.8.1{suffix}_vl02_catalog_members.fit')
-# redmapper_path = os.path.join(base_path, 'redmapper_v4_v8_v51_y6_v7/run/', f'Cardinal-3Y6a_v2.0_run_run_redmapper_v0.8.1{suffix}_vl02_catalog.fit')
+redmapper_path = os.path.join(base_path, 'redmapper_v4_v8_v51_y6_v7/run/', f'Cardinal-3Y6a_v2.0_run_run_redmapper_v0.8.1{suffix}_vl02_catalog.fit')
 bpz_path = os.path.join(base_path, 'Cardinal-3_v2.0_Y6a_bpz.h5')
 
-# # Compute pixel IDs
-# gold_radec = get_name(gold_path, ['ra', 'dec'], file_format='hdf5', key='gold')
-# gold_pixels = compute_pixel_id(gold_radec['ra'], gold_radec['dec'])
-# del gold_radec
-# np.savez(os.path.join(base_path, f'gold_pixels_nside8.npz'), gold_pixels=gold_pixels)
-gold_pixels = np.load(os.path.join(base_path, 'gold_pixels_nside8.npz'))['gold_pixels']
+gold_pixels_path = os.path.join(base_path, 'gold_pixels_nside8.npz')
+if os.path.isfile(gold_pixels_path):
+    gold_pixels = np.load(gold_pixels_path)['gold_pixels']
+else:
+    gold_radec = get_name(gold_path, ['ra', 'dec'], file_format='hdf5', key='gold')
+    gold_pixels = compute_pixel_id(gold_radec['ra'], gold_radec['dec'])
+    del gold_radec
+    np.savez(gold_pixels_path, gold_pixels=gold_pixels)
 
-redmapper_mem_radec = get_name(redmapper_mem_path, ['ra', 'dec'], file_format='fits')
-redmapper_mem_pixels = compute_pixel_id(redmapper_mem_radec['ra'], redmapper_mem_radec['dec'])
-del redmapper_mem_radec
-
-np.savez(os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_pixels_nside8.npz'), redmapper_mem_pixels=redmapper_mem_pixels)
+redmapper_mem_pixels_path = os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_pixels_nside8.npz')
+if os.path.isfile(redmapper_mem_pixels_path):
+    redmapper_mem_pixels = np.load(os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_pixels_nside8.npz'))['redmapper_mem_pixels']
+else:
+    redmapper_mem_radec = get_name(redmapper_mem_path, ['ra', 'dec'], file_format='fits')
+    redmapper_mem_pixels = compute_pixel_id(redmapper_mem_radec['ra'], redmapper_mem_radec['dec'])
+    del redmapper_mem_radec
+    np.savez(redmapper_mem_pixels_path, redmapper_mem_pixels=redmapper_mem_pixels)
 
 unique_gold_pixels = np.unique(gold_pixels)
 unique_redmapper_mem_pixels = np.unique(redmapper_mem_pixels)
-
 
 def correct_endianness(data):
     for col in data.keys():
@@ -109,9 +113,9 @@ def process_redmapper_pixel(pixel_id):
     print(f"Processing pixel {pixel_id}")
 
     # Load data into pandas DataFrames
-    gold_data_pixel = load_data_for_pixel(gold_path, pixel_id, ['ra', 'dec', 'coadd_object_id', 'haloid', 'rhalo', 'r200', 'm200', 'px', 'py', 'pz'], gold_pixels, file_format='hdf5', key='gold')
-    redmapper_mem_data_pixel = load_data_for_pixel(redmapper_mem_path, pixel_id, ['id', 'mem_match_id'], redmapper_mem_pixels, file_format='fits')
-    z_values = load_data_for_pixel(bpz_path, pixel_id, ['redshift_cos'], gold_pixels, file_format='hdf5', key='bpz')
+    gold_data_pixel = load_data_for_pixel_and_neighbors(gold_path, pixel_id, ['coadd_object_id', 'haloid', 'rhalo', 'r200', 'm200', 'px', 'py', 'pz'], gold_pixels, file_format='hdf5', key='gold')
+    redmapper_mem_data_pixel = load_data_for_pixel(redmapper_mem_path, pixel_id, ['ra', 'dec', 'id', 'mem_match_id'], redmapper_mem_pixels, file_format='fits')
+    z_values = load_data_for_pixel_and_neighbors(bpz_path, pixel_id, ['redshift_cos'], gold_pixels, file_format='hdf5', key='bpz')
     gold_data_pixel['z'] = z_values['redshift_cos']
     del z_values
     
@@ -135,4 +139,5 @@ def process_redmapper_pixel(pixel_id):
 
 results = Parallel(n_jobs=-1, verbose=10)(delayed(process_redmapper_pixel)(pixel_id) for pixel_id in tqdm(unique_redmapper_mem_pixels, desc="Processing pixels"))
 redmapper_mem_data = vstack(results)
-redmapper_mem_data.write(os.path.join(base_path,f'chunhao-redmapper{suffix}_mem_data_all.fits'), overwrite=True)
+matched_member_path = os.path.join(base_path,f'chunhao-redmapper{suffix}_mem_data_all_new.fits')
+redmapper_mem_data.write(matched_member_path, overwrite=True)

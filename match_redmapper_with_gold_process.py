@@ -33,16 +33,6 @@ def get_name(file_path, names, mask=None, file_format='fits', key='gold'):
         raise ValueError(f"Unknown file format: {file_format}")
     return data_names
 
-def init_logger(log_queue):
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    
-    # Create a handler that logs to the Queue
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    handler.setStream(log_queue)
-    logger.addHandler(handler)
-
 def save_cluster_data_hdf5(cluster_id, data, output_folder):
     cluster_filename = os.path.join(output_folder, f"{cluster_id}.h5")
     temp_filename = os.path.join(output_folder, f"{cluster_id}_temp.h5")
@@ -58,8 +48,6 @@ def save_cluster_data_hdf5(cluster_id, data, output_folder):
                 halo_group.attrs['n_members'] = halo_data['n_members']
                 halo_group.attrs['m200'] = halo_data['m200']
     os.rename(temp_filename, cluster_filename)
-
-# shared_vars_lock = Lock()
 
 def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_variables, output_folder):
     cluster_filename = os.path.join(output_folder, f"{cluster_id}.h5")
@@ -117,8 +105,6 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
         for key, value in halo_data['members'].items():
             halo_data['members'][key] = np.array(value)
     
-#     associated_halo_data_sorted = sorted(associated_halo_data, key=lambda x: x['n_members'], reverse=True)
-
 #    logging.info("Finished processing assoicated data...")
         
     # Determine unassociated members
@@ -148,13 +134,7 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
             'members': member_data
         })
     
-#     unassociated_halo_data_sorted = sorted(unassociated_halo_data, key=lambda x: x['n_members'], reverse=True)
 #     logging.info("Finished processing unassociated data...")
-    
-    # Sort the data for unassociated galaxies
-#     unassociated_halo_data.sort(key=lambda x: x['n_members'], reverse=True)
-
-#    logging.info("Check...")
     
     save_cluster_data_hdf5(cluster_id, {
         'associated': associated_halo_data,
