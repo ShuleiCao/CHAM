@@ -148,9 +148,10 @@ if __name__ == "__main__":
                         help='Halos and galaxies masked or not')
     parser.add_argument('--base_path', type=str, default='/lustre/work/client/users/shuleic/Cardinalv3/',
                         help='Specify base path')
-    parser.add_argument('--suffix', type=str, default='_lgt05', choices=['_lgt20', '_lgt05'], required=True, 
+    parser.add_argument('--suffix', type=str, default='_lgt05', choices=['_lgt20', '_lgt05'], 
                         help='Suffix for redmapper richness cut')
-    parser.add_argument('--halo_filename', type=str, default='_lgt05', choices=['_lgt20', '_lgt05'], required=True, 
+    parser.add_argument('--halo_filename', type=str, default='halo_data_all_new.fits', 
+                        choices=['halo_data_all_new.fits', 'halo_data_all.fits', 'halo_data_masked.fits'], 
                         help='Halo path filename')
     
     args = parser.parse_args()
