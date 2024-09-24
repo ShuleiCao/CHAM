@@ -1,23 +1,17 @@
 import h5py
-from astropy.io import fits
 import numpy as np
-import healpy as hp
 import os
 from astropy.table import Table, vstack
-from joblib import Parallel, delayed
-from collections import defaultdict
 from scipy.spatial import cKDTree
 import gc
 import logging
 from tqdm import tqdm
 from multiprocessing import Manager, Pool, Lock
+import argparse
 
 import tempfile
 temp_dir = "/lustre/scratch/client/users/shuleic/temp_folder/"
 tempfile.tempdir = temp_dir
-
-## Initialize logging
-#logging.basicConfig(level=logging.INFO)
 
 def get_name(file_path, names, mask=None, file_format='fits', key='gold'):
     if file_format == 'fits':
@@ -147,44 +141,97 @@ def process_cluster(cluster_id, redmapper_mem_data_path, halo_coords, halo_r200,
     }, output_folder)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Matching arguments.')
+    parser.add_argument('--mismatched', action='store_true',
+                        help='There exists mismatched or not')
+    parser.add_argument('--masked', action='store_true',
+                        help='Halos and galaxies masked or not')
+    parser.add_argument('--base_path', type=str, default='/lustre/work/client/users/shuleic/Cardinalv3/',
+                        help='Specify base path')
+    parser.add_argument('--suffix', type=str, default='_lgt05', choices=['_lgt20', '_lgt05'], required=True, 
+                        help='Suffix for redmapper richness cut')
+    parser.add_argument('--halo_filename', type=str, default='_lgt05', choices=['_lgt20', '_lgt05'], required=True, 
+                        help='Halo path filename')
+    
+    args = parser.parse_args()
+    
+    def wrapper(cluster_id):
+        return process_cluster(cluster_id, redmapper_mem_data_path, halo_coords, halo_r200, halo_ids, halo_masses, tree_processes, output_folder)
 
     # Set the logging level to INFO
     logging.basicConfig(level=logging.INFO)
 
-    base_path = '/lustre/work/client/users/shuleic/Cardinalv3/'
-    # suffix = '_lgt20'
-    suffix = '_lgt05'
+    base_path = args.base_path
+    suffix = args.suffix
     
-    halo_data_path = os.path.join(base_path, 'halo_data_all_new.fits')
+    halo_data_path = os.path.join(base_path, args.halo_filename)
     redmapper_mem_data_path = os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_data_all.fits')
-
-    # Read the data from the saved FITS files
-    halo_data = get_name(halo_data_path, ['m200', 'r200', 'haloid', 'px', 'py', 'pz'])
-    halo_coords = np.vstack((halo_data['px'], halo_data['py'], halo_data['pz'])).T
-    halo_r200 = halo_data['r200']
-    halo_ids = halo_data['haloid']
-    halo_masses = halo_data['m200']
-    del halo_data
-    gc.collect()
-
-    # logging.info("Processing clusters...")
-    tree_processes = 4
-    num_threads = 64
 
     redmapper_mem_data = get_name(redmapper_mem_data_path, ['mem_match_id'])
     unique_cluster_ids = np.unique(redmapper_mem_data['mem_match_id'])
     del redmapper_mem_data
 #     gc.collect()
 
-
     output_folder = os.path.join(base_path, f"cluster{suffix}_data")
     os.makedirs(output_folder, exist_ok=True)
     sorted_unique_cluster_ids = sorted(unique_cluster_ids)
     del unique_cluster_ids
-    
-    def wrapper(cluster_id):
-        return process_cluster(cluster_id, redmapper_mem_data_path, halo_coords, halo_r200, halo_ids, halo_masses, tree_processes, output_folder)
+    tree_processes = 4
+    num_processes = 64
 
-    with tqdm(total=len(sorted_unique_cluster_ids), desc="Processing clusters") as pbar, Pool(processes=num_threads) as pool:
-        for result in pool.imap(wrapper, sorted_unique_cluster_ids):
-            pbar.update()  # Update the progress bar for each completed task
+    check_clusters_paths = [os.path.exists(os.path.join(output_folder, f'{cluster_id}.h5')) for cluster_id in sorted_unique_cluster_ids]
+
+    all_exist = all(check_clusters_paths)
+
+    if not all_exist or args.mismatched:
+        # Read the data from the saved FITS files only if needed
+        halo_data = get_name(halo_data_path, ['m200', 'r200', 'haloid', 'px', 'py', 'pz'])
+        halo_coords = np.vstack((halo_data['px'], halo_data['py'], halo_data['pz'])).T
+        halo_r200 = halo_data['r200']
+        halo_ids = halo_data['haloid']
+        halo_masses = halo_data['m200']
+        del halo_data
+        gc.collect()
+
+    # Determine which clusters to process
+    clusters_to_process = []
+
+    if all_exist:
+        # If all files exist and mismatched flag is set, process mismatched clusters
+        if args.mismatched:
+            mismatched_ids = np.load(os.path.join(base_path, f'mismatched_clusters{suffix}.npz'))['mismatched_ids']
+            clusters_to_process.extend(mismatched_ids)
+
+            # remove existing files for mismatched clusters
+            for mismatched_id in mismatched_ids:
+                mismatched_cluster_path = os.path.join(output_folder, f'{mismatched_id}.h5')
+                if os.path.isfile(mismatched_cluster_path):
+                    os.remove(mismatched_cluster_path)
+        else:
+            logging.info("All clusters exist. Exiting without processing.")
+            exit(0)
+
+    else:
+        # If not all files exist, process the non-existing clusters
+        existing_files = set(os.listdir(output_folder))  # Get all files in the output folder
+        clusters_to_process = [cluster_id for cluster_id in sorted_unique_cluster_ids if f"{cluster_id}.h5" not in existing_files]
+
+    # Proceed with processing the determined clusters
+    if clusters_to_process:
+        with tqdm(total=len(clusters_to_process), desc="Processing clusters") as pbar, Pool(processes=num_processes) as pool:
+            for result in pool.imap(wrapper, clusters_to_process):
+                pbar.update()  # Update progress for each completed task
+    else:
+        logging.info("No clusters to process.")
+
+    # Use multiprocessing with Pool and tqdm
+    # with tqdm(total=len(sorted_unique_cluster_ids), desc="Processing clusters") as pbar, Pool(processes=num_processes) as pool:
+    #     for cluster_id in clusters_to_process:
+    #         pool.apply_async(
+    #             process_cluster,
+    #             args=(cluster_id, redmapper_mem_data_path, tree_processes, shared_variables, output_folder),
+    #             callback=lambda _: pbar.update(1)  # Update progress for each completed task
+    #         )
+    #     pool.close()
+    #     pool.join()
+
