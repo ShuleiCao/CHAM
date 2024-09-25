@@ -166,7 +166,7 @@ if __name__ == "__main__":
     suffix = args.suffix
     
     halo_data_path = os.path.join(base_path, args.halo_filename)
-    redmapper_mem_data_path = os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_data_all.fits')
+    redmapper_mem_data_path = os.path.join(base_path, f'chunhao-redmapper{suffix}_mem_data_all_new.fits')
 
     redmapper_mem_data = get_name(redmapper_mem_data_path, ['mem_match_id'])
     unique_cluster_ids = np.unique(redmapper_mem_data['mem_match_id'])
@@ -178,7 +178,17 @@ if __name__ == "__main__":
     sorted_unique_cluster_ids = sorted(unique_cluster_ids)
     del unique_cluster_ids
     tree_processes = 4
-    num_processes = 64
+
+    # Get the number of CPUs assigned to the current task
+    assigned_cpus = os.getenv('SLURM_CPUS_PER_TASK')
+
+    if assigned_cpus is not None:
+        assigned_cpus = int(assigned_cpus)
+        print(f'Assigned CPUs: {assigned_cpus}')
+    else:
+        print('Not running under SLURM or the variable is not set.')
+
+    num_processes = assigned_cpus//2 # Adjust this if necessary
 
     check_clusters_paths = [os.path.exists(os.path.join(output_folder, f'{cluster_id}.h5')) for cluster_id in sorted_unique_cluster_ids]
 

@@ -13,8 +13,8 @@
 
 ##SBATCH --cpus-per-task=128
 ##SBATCH --mem=2000000MB
-#SBATCH --cpus-per-task=64
-#SBATCH --mem=1000000MB
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=500000MB
 #SBATCH -p "highmem"
 #SBATCH -t 04-23:59:59
 
