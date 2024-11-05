@@ -9,5 +9,5 @@
 3. **Match Halos with redMaPPer Members**:  
    After saving both, choose one of `match_redmapper_with_gold` files (`_process` is better) to match the halos with redMaPPer members, depending on available memory.
 
-4. **Postprocess**:  
-   Example of postprocess is in the jupyter notebook.
+4. **Consolidate**:  
+   Consolidate all clusters into one data file for post analyses.
