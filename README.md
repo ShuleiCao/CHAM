@@ -7,7 +7,7 @@
    Run `redmapper_member_save.py` to process and save redMaPPer members (also matched with `gold` and `bpz` catalogs for Cardinal) in `fits` format.
 
 3. **Match Halos with redMaPPer Members**:  
-  Run `match_redmapper_with_gold_process` to match the halos ([`m200`, `r200`, `haloid`, `px`, `py`, `pz`] saved in `fits` or `hdf5` format) with redMaPPer members (in `fits` or `hdf5` format). Clusters with `associated` halos
+  Run `match_redmapper_with_gold_process` to match the halos (with halo ID, mass, radius, and 3D true positions saved in `fits` or `hdf5` format) with redMaPPer members (with cluster ID, and galaxy ID and 3D positions saved in `fits` or `hdf5` format). Clusters are stored as `hdf5` files, one file per cluster, named by cluster ID (e.g., `1.hdf5` for a cluster with ID 1). Each file contains `associated` and `unassociated` categories, where `associated` has members associated with halos and `unassociated` has members not belonging to any halo.
 
 4. **Consolidate**:  
-   Consolidate all clusters into one data file for post analyses.
+   Consolidate all clusters into one `hdf5` file for post analyses.
