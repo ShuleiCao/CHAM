@@ -7,7 +7,7 @@
    Run `redmapper_member_save.py` to process and save redMaPPer members (also matched with `gold` and `bpz` catalogs for Cardinal).
 
 3. **Match Halos with redMaPPer Members**:  
-  Choose one of `match_redmapper_with_gold` files (`_process` is better) to match the halos with redMaPPer members, depending on available memory.
+  Run `match_redmapper_with_gold_process` to match the halos with redMaPPer members.
 
 4. **Consolidate**:  
    Consolidate all clusters into one data file for post analyses.
