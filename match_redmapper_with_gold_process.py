@@ -116,7 +116,7 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
     combined_key_str = np.array([f"{haloid}_{m200}" for haloid, m200 in zip(unassociated_data['haloid'], unassociated_data['m200'])], dtype='U25')
     unique_combined_key, counts = np.unique(combined_key_str, return_counts=True)
 
-    unassociated_halo_data = []
+    unassociated_galaxy_data = []
     
     for combined_key, count in zip(unique_combined_key, counts):
         halo_id, halo_mass = map(float, combined_key.split('_'))
@@ -128,7 +128,7 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
             key: value[halo_mask]
             for key, value in unassociated_data.items()
         }
-        unassociated_halo_data.append({
+        unassociated_galaxy_data.append({
             'haloid': halo_id,
             'm200': halo_mass,
             'n_members': count,
@@ -139,7 +139,7 @@ def process_cluster(cluster_id, redmapper_mem_data_path, tree_processes, shared_
     
     save_cluster_data_hdf5(cluster_id, {
         'associated': associated_halo_data,
-        'unassociated': unassociated_halo_data
+        'unassociated': unassociated_galaxy_data
     }, output_folder)
 
 if __name__ == "__main__":
