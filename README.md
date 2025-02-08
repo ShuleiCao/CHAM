@@ -1,4 +1,4 @@
-### Workflow for Matching Halos with redMaPPer Members
+## Workflow for Matching Halos with redMaPPer Members
 
 1. **Save Host Halos (Optional)**:  
    If host (main) halos (matched with `gold` and `bpz` catalogs for Cardinal) are not available, run `host_halo_save.py` to create and save them in `fits` format.
@@ -11,3 +11,15 @@
 
 4. **Consolidate**:  
    Consolidate all clusters into one `hdf5` file for post analyses.
+
+## Dependencies
+The following modules are required:
+* numpy
+* astropy
+* h5py
+* scipy
+* multiprocessing
+* joblib
+* tqdm (optional, can be removed)
+* pandas (optional)
+* healpy (optional) 
