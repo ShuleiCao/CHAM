@@ -27,4 +27,3 @@ source /users/shuleic/miniconda3/etc/profile.d/conda.sh
 conda activate /lustre/work/client/users/shuleic/.conda/envs/redmapper_env
 
 python /users/shuleic/scripts/pythonscripts/All_other_useful_tools/match_redmapper_Cardinal/match_redmapper_with_gold_process.py --mismatched
-# python /users/shuleic/scripts/pythonscripts/All_other_useful_tools/match_redmapper_Cardinal/match_redmapper_with_gold_process_noshare.py
