@@ -1,4 +1,4 @@
-# Cluster-halo matching
+# Cluster-Halo Matching (CHM)
 Input (halo ID, mass, radius, and 3D true positions saved in `fits` or `hdf5` format) with redMaPPer members (with cluster ID, and galaxy ID and 3D positions saved in `fits` or `hdf5` format).
 
 ## Dependencies
