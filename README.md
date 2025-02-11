@@ -13,6 +13,5 @@ The following modules are required:
 * pandas (optional)
 * healpy (optional) 
 
-## Outputs explanation
-1. Clusters are stored as `hdf5` files, one file per cluster, named by cluster ID (e.g., `1.hdf5` for a cluster with ID 1). Each file contains `associated` and `unassociated` categories, where `associated` has members associated with halos and `unassociated` has members not belonging to any halo. The `associated` category organizes data by halo ID.  Each halo's subgroup contains datasets of galaxy properties for associated members and attributes for the number of members and halo mass. The `unassociated` catagory has similar structure but with halo ID assigned to galaxies in the original (`gold` for Cardinal) catalog.
-2. The clusters (along with `centrals` from cluster catalog) will be saved into one `hdf5` file in different catagories organized by cluster ID.
+## Description
+Detailed descriptions can be found at: https://github.com/ShuleiCao/CHM/wiki
