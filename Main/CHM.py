@@ -11,7 +11,7 @@ import tempfile
 import argparse
 
 parser = argparse.ArgumentParser(description='Matching arguments.')
-parser.add_argument('--member_path', type=str, default='/path/to/your_cluster_member/member_data.fits',
+parser.add_argument('--member_path', type=str, default='/path/to/your_cluster_member/member_data_lgt20.fits',
                     help='Specify cluster member path')
 parser.add_argument('--lambda_cut_suffix', type=str, default='_lgt20', 
                     help='Suffix for cluster richness cut, default: _lgt20 (for richness cut 20)')
