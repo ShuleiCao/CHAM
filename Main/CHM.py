@@ -25,7 +25,7 @@ parser.add_argument('--keys', type=str,
                           "Default: 'px,py,pz,haloid,m200,r200,mem_match_id,coadd_object_id,ra,dec,z' "
                           "(Includes true positions, halo ID, halo mass, halo radius, "
                           "cluster ID, member galaxy ID, RA, DEC, and redshift.) "
-                          "Please pass the keys in the same order as the default (at least until 'coadd_object_id')."))
+                          "Please pass the keys in the same order as the default, otherwise modify as you see fit."))
 parser.add_argument('--temp_dir', type=str, default='/path/to/your_temp_folder/', 
                     help='Specify temporary folder for nuisance outputs')
 
