@@ -1,7 +1,8 @@
 # Cluster-Halo Matching (CHM)
+Users can directly provide (and modify as you like) **command-line arguments** for cluster member path, halo path, output path, and keys (**in a specific order**) in the 'Main/CHM.py' using `argparse`.
 ## Inputs
-* Halos: halo ID, mass, radius, and 3D true positions in `fits` or `hdf5` format (See example for preparing Cardinal halos in `fits` format)
-* Cluster members: cluster ID, and galaxy ID and 3D positions in `fits` or `hdf5` format (See example for preparing Cardinal redMaPPer members in `fits` format)
+* Halos: halo's 3D positions, ID, mass, and radius in `fits` or `hdf5` format (See example for saving Cardinal halos in `fits` format)
+* Cluster members: members' 3D positions, cluster ID, and galaxy ID in `fits` or `hdf5` format (See example)
 ## Outputs
 Detailed descriptions can be found at: https://github.com/ShuleiCao/CHM/wiki
 
