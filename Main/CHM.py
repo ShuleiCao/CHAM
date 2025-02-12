@@ -167,7 +167,7 @@ if __name__ == "__main__":
     # Set the logging level to INFO
     logging.basicConfig(level=logging.INFO)
 
-    suffix = args.lambd_cut_suffix
+    suffix = args.lambda_cut_suffix
     keys = args.keys.split(',')
     coords_keys = keys[:3] # Positions
     halo_keys = keys[:6] # Positions, ID, mass, and radius
