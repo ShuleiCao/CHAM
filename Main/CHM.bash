@@ -17,7 +17,7 @@ source /users/shuleic/miniconda3/etc/profile.d/conda.sh
 conda activate /lustre/work/client/users/shuleic/.conda/envs/redmapper_env
 
 python /path/to/your/script/CHM.py --keys px,py,pz,haloid,m200,r200,mem_match_id,coadd_object_id \
---member_path /path/to/your_cluster_member/member_data.fits --lambda_cut_suffix _lgt20 \
+--member_path /path/to/your_cluster_member/member_data_lgt20.fits --lambda_cut_suffix _lgt20 \
 --halo_path /path/to/your_halo/halo_data.fits --output_loc /path/to/your_output/ \
 --temp_dir /path/to/your_temp_folder/
 
