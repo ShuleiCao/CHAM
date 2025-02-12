@@ -1,10 +1,20 @@
 import os
 import h5py
-import numpy as np
 from joblib import Parallel, delayed
-from astropy.table import Table
 import logging
-from tqdm import tqdm
+import tempfile
+import argparse
+
+parser = argparse.ArgumentParser(description='Matching arguments.')
+parser.add_argument('--lambda_cut_suffix', type=str, default='_lgt20', 
+                    help='Suffix for cluster richness cut, default: _lgt20 (for richness cut 20)')
+parser.add_argument('--output_loc', type=str, default='/path/to/your_output/', 
+                    help='Specify folder location for outputs')
+parser.add_argument('--temp_dir', type=str, default='/path/to/your_temp_folder/', 
+                    help='Specify temporary folder for nuisance outputs')
+
+args = parser.parse_args()
+tempfile.tempdir = args.temp_dir
 
 # Configure logging to capture errors and warnings
 logging.basicConfig(
@@ -13,40 +23,33 @@ logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s'
 )
 
-def process_file(filename, input_folder, redmapper_centrals_data):
+def process_file(filename, input_folder):
     cluster_id = filename.split('.')[0]
     try:
         with h5py.File(os.path.join(input_folder, filename), 'r') as cluster_file:
-            # Prepare 'centrals' data
-            mask = redmapper_centrals_data['mem_match_id'] == int(cluster_id)
-            centrals_data = {}
-            for col_name in redmapper_centrals_data.colnames:
-                data = redmapper_centrals_data[col_name][mask]
-                centrals_data[col_name] = data  # Preserve original dtype
 
             # Process other categories
             categories_data = {}
             for category in cluster_file.keys():
-                if category != 'centrals':
-                    categories_data[category] = {}
-                    for halo_id in cluster_file[category].keys():
-                        halo_group = cluster_file[category][halo_id]
-                        halo_data = {}
-                        for dataset in halo_group.keys():
-                            data = halo_group[dataset][:]
-                            halo_data[dataset] = data  # Preserve original dtype
-                        # Extract attributes
-                        halo_attrs = {}
-                        for attr in halo_group.attrs:
-                            halo_attrs[attr] = halo_group.attrs[attr]  # Preserve original dtype
-                        halo_data['attrs'] = halo_attrs
-                        categories_data[category][halo_id] = halo_data
-        return (cluster_id, centrals_data, categories_data)
+                categories_data[category] = {}
+                for halo_id in cluster_file[category].keys():
+                    halo_group = cluster_file[category][halo_id]
+                    halo_data = {}
+                    for dataset in halo_group.keys():
+                        data = halo_group[dataset][:]
+                        halo_data[dataset] = data  # Preserve original dtype
+                    # Extract attributes
+                    halo_attrs = {}
+                    for attr in halo_group.attrs:
+                        halo_attrs[attr] = halo_group.attrs[attr]  # Preserve original dtype
+                    halo_data['attrs'] = halo_attrs
+                    categories_data[category][halo_id] = halo_data
+        return (cluster_id, categories_data)
     except Exception as e:
         logging.error(f"Error processing file {filename}: {e}")
         return None  # Indicate failure for this file
 
-def write_to_hdf5(main_file, cluster_id, centrals_data, categories_data):
+def write_to_hdf5(main_file, cluster_id, categories_data):
     try:
         if cluster_id in main_file:
             logging.warning(f"Cluster {cluster_id} already exists in the consolidated file. Skipping.")
@@ -55,14 +58,6 @@ def write_to_hdf5(main_file, cluster_id, centrals_data, categories_data):
         cluster_group = main_file.create_group(cluster_id)
         logging.info(f"Created group for cluster '{cluster_id}'.")
 
-        # Write 'centrals' data
-        centrals_group = cluster_group.create_group('centrals')
-        logging.info(f"Created 'centrals' group for cluster '{cluster_id}'.")
-        for col_name, data in centrals_data.items():
-            centrals_group.create_dataset(col_name, data=data)
-            logging.info(f"  Written centrals dataset '{col_name}' with data shape {data.shape}.")
-
-        # Write other categories
         for category, category_data in categories_data.items():
             category_group = cluster_group.create_group(category)
             logging.info(f"  Created category group '{category}' for cluster '{cluster_id}'.")
@@ -81,7 +76,7 @@ def write_to_hdf5(main_file, cluster_id, centrals_data, categories_data):
     except Exception as e:
         logging.error(f"Error writing cluster {cluster_id} to HDF5: {e}")
 
-def consolidate_hdf5_files_with_centrals_parallel(input_folder, output_file, redmapper_centrals_data, num_workers=4, batch_size=1000, dry_run=False, test_size=100):
+def consolidate_hdf5_files_with_centrals_parallel(input_folder, output_file, num_workers=4, batch_size=1000, dry_run=False, test_size=100):
     # Get the list of files to process
     files = [filename for filename in os.listdir(input_folder) if filename.endswith('.h5')]
 
@@ -108,7 +103,7 @@ def consolidate_hdf5_files_with_centrals_parallel(input_folder, output_file, red
         
         # Parallel processing of the batch
         results = Parallel(n_jobs=num_workers, verbose=0)(
-            delayed(process_file)(filename, input_folder, redmapper_centrals_data) for filename in batch_files
+            delayed(process_file)(filename, input_folder) for filename in batch_files
         )
 
         # Open the main HDF5 file in append mode
@@ -116,8 +111,8 @@ def consolidate_hdf5_files_with_centrals_parallel(input_folder, output_file, red
             for res in results:
                 if res is None:
                     continue  # Skip files that failed to process
-                cluster_id, centrals_data, categories_data = res
-                write_to_hdf5(main_file, cluster_id, centrals_data, categories_data)
+                cluster_id, categories_data = res
+                write_to_hdf5(main_file, cluster_id, categories_data)
 
         if dry_run:
             print("Dry run complete! No data has been written.")
@@ -141,20 +136,16 @@ if __name__ == "__main__":
     job_num = assigned_cpus
     print(f'Job number is {job_num}')
 
-    base_path = '/lustre/work/client/users/shuleic/Cardinalv3/'
-    suffix = '_lgt05'
+    suffix = args.lambda_cut_suffix
     
-    redmapper_centrals_path = os.path.join(base_path, f'chunhao-redmapper{suffix}_centrals_data_all.fits')
-    output_file = os.path.join(base_path, f'sorted-chunhao-redmapper{suffix}_data_new.h5')
-    redmapper_centrals_data = Table.read(redmapper_centrals_path)
+    output_file = os.path.join(args.output_loc, f'sorted_clusters{suffix}.h5')
     
-    input_folder = os.path.join(base_path, f'cluster{suffix}_data')
+    input_folder = os.path.join(args.output_loc, f'clusters{suffix}')
     
     # Perform a dry run first
     # consolidate_hdf5_files_with_centrals_parallel(
     #     input_folder=input_folder, 
     #     output_file=output_file, 
-    #     redmapper_centrals_data=redmapper_centrals_data, 
     #     num_workers=job_num, 
     #     batch_size=1000, 
     #     dry_run=True,  # Set to True for a dry run
@@ -165,7 +156,6 @@ if __name__ == "__main__":
     consolidate_hdf5_files_with_centrals_parallel(
         input_folder=input_folder, 
         output_file=output_file, 
-        redmapper_centrals_data=redmapper_centrals_data, 
         num_workers=job_num, 
         batch_size=1000, 
         dry_run=False, 
