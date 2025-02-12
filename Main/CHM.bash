@@ -13,8 +13,8 @@
 # load modules and activate conda environment
 module load gcc/11.2.0
 module load openmpi/4.1.6-vfi4iwj
-source /users/shuleic/miniconda3/etc/profile.d/conda.sh
-conda activate /lustre/work/client/users/shuleic/.conda/envs/redmapper_env
+source /path/to/your/miniconda3/etc/profile.d/conda.sh
+conda activate /path/to/your/.conda/envs/redmapper_env
 
 python /path/to/your/script/CHM.py --keys px,py,pz,haloid,m200,r200,mem_match_id,coadd_object_id \
 --member_path /path/to/your_cluster_member/member_data_lgt20.fits --lambda_cut_suffix _lgt20 \
